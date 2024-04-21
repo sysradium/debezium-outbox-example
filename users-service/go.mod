@@ -4,6 +4,7 @@ go 1.22.1
 
 require (
 	github.com/google/uuid v1.6.0
+	google.golang.org/protobuf v1.33.0
 	gorm.io/driver/postgres v1.5.7
 	gorm.io/gorm v1.25.9
 )

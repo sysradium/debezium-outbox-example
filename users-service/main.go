@@ -1,12 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/events"
+	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -32,20 +32,22 @@ func NewEventPublisher(db *gorm.DB) *EventPublisher {
 }
 
 // Publish marshals the UserRegistered struct and stores it in the outbox
-func (p *EventPublisher) Publish(event events.UserRegistered) error {
-	// Marshal the event to JSON
-	payload, err := json.Marshal(event)
+func (p *EventPublisher) Publish(event *events.UserRegistered) error {
+	marshaler := protojson.MarshalOptions{
+		UseProtoNames: true,
+		Multiline:     false,
+	}
+	jsonBytes, err := marshaler.Marshal(event)
 	if err != nil {
 		return err
 	}
 
-	// Create an Outbox entry
 	outboxEntry := Outbox{
 		ID:            uuid.New(),
 		AggregateType: "UserRegistered",
 		//		AggregateID:   uuid.New().String(), // Assuming AggregateID is another UUID
 		Type:    "UserRegisteredEvent",
-		Payload: payload,
+		Payload: jsonBytes,
 	}
 
 	// Save the entry to the database
@@ -75,10 +77,10 @@ func main() {
 	publisher := NewEventPublisher(db)
 
 	// Create a UserRegistered event
-	userEvent := events.UserRegistered{
+	userEvent := &events.UserRegistered{
 		Username:  "johndoe",
-		Firstname: "John",
-		Lastname:  "Doe",
+		FirstName: "John",
+		LastName:  "Doe",
 	}
 
 	// Publish the event

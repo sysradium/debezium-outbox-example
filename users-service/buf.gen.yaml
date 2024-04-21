@@ -1,0 +1,10 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: "github.com/sysradium/debezium-outbox-example/users-service"
+plugins:
+  - plugin: go
+    out: .
+    opt:
+      - paths=source_relative
