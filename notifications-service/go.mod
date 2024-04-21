@@ -1,4 +1,4 @@
-module github.com/sysradium/debezium-outbox-exmaple/notifications-service
+module github.com/sysradium/debezium-outbox-example/notifications-service
 
 go 1.22.1
 

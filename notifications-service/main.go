@@ -8,6 +8,7 @@ import (
 
 	nc "github.com/nats-io/nats.go"
 	"github.com/spewerspew/spew"
+	pb "github.com/sysradium/debezium-outbox-example/users-service/events"
 )
 
 type Root struct {
@@ -49,14 +50,20 @@ func main() {
 		log.Fatal(err)
 	}
 
-	sub, err := js.Subscribe("outbox.event.TypeA", func(msg *nc.Msg) {
+	sub, err := js.Subscribe("outbox.event.UserRegistered", func(msg *nc.Msg) {
 		var m Root
 		if err := json.Unmarshal(msg.Data, &m); err != nil {
 			return
 		}
-
 		fmt.Printf("received message: %v\n", m.Payload.Id)
-		spew.Dump(string(m.Payload.Payload))
+
+		var uMsg pb.UserRegistered
+		if err := json.Unmarshal(m.Payload.Payload, &uMsg); err != nil {
+			log.Println("unable to unmarshal message")
+			return
+		}
+
+		spew.Dump(uMsg)
 		msg.Ack()
 	})
 	if err != nil {
