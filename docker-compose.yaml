@@ -1,0 +1,50 @@
+services:
+  users-service:
+    image: golang:1.22.1-alpine
+    volumes:
+      - "./users-service:/usr/src/app"
+      - "$GOPATH/pkg/mod:/go/pkg/mod"
+
+  notifications-service:
+    image: golang:1.22.1-alpine
+    volumes:
+      - "./notifications-service:/usr/src/app"
+      - "$GOPATH/pkg/mod:/go/pkg/mod"
+
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_PASSWORD: some-password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+
+  nats:
+    image: docker.io/nats:latest
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command:
+      - "--debug"
+      - "--http_port=8222"
+      - "--js"
+
+  debezium:
+    image: debezium/server
+    volumes:
+      - debezium-data:/debezium/data
+      - ./debezium/application.properties:/debezium/conf/application.properties
+    depends_on:
+      - db
+      - nats
+
+  nats-box:
+    image: natsio/nats-box
+    network_mode: "service:nats"
+
+volumes:
+  db-data:
+  debezium-data:
