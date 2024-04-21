@@ -10,7 +10,7 @@ github.com/spewerspew/spew v0.0.0-20230513223542-89b69fbbe2bd h1:csraKifkLpqDClU
 github.com/spewerspew/spew v0.0.0-20230513223542-89b69fbbe2bd/go.mod h1:cyGycBxnlCATLUv5jtPwaHnkiYomNWzXQougLmaCTzU=
 github.com/sysradium/debezium-outbox-example/users-service v0.0.0-20240421170043-5efba4742760 h1:zAUtU/85XTUMngUeMuLzVa+d4FQGmCMbqKenfInGjA8=
 github.com/sysradium/debezium-outbox-example/users-service v0.0.0-20240421170043-5efba4742760/go.mod h1:3rGwKSX3fghy39aKZmqczIqmCIVDX1Jwn5Ku+eoe02o=
-golang.org/x/crypto v0.18.0 h1:PGVlW0xEltQnzFZ55hkuX5+KLyrMYhHld1YHO4AKcdc=
-golang.org/x/crypto v0.18.0/go.mod h1:R0j02AL6hcrfOiy9T4ZYp/rcWeMxM3L6QYxlOuEG1mg=
-golang.org/x/sys v0.16.0 h1:xWw16ngr6ZMtmxDyKyIgsE93KNKz5HKmMa3b8ALHidU=
-golang.org/x/sys v0.16.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/crypto v0.22.0 h1:g1v0xeRhjcugydODzvb3mEM9SQ0HGp9s/nh3COQ/C30=
+golang.org/x/crypto v0.22.0/go.mod h1:vr6Su+7cTlO45qkww3VDJlzDn0ctJvRgYbC2NvXHt+M=
+golang.org/x/sys v0.19.0 h1:q5f1RH2jigJ1MoAWp2KTp3gm5zAGFUTarQZ5U386+4o=
+golang.org/x/sys v0.19.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
