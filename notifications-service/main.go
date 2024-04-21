@@ -9,6 +9,7 @@ import (
 	nc "github.com/nats-io/nats.go"
 	"github.com/spewerspew/spew"
 	pb "github.com/sysradium/debezium-outbox-example/users-service/events"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type Root struct {
@@ -57,8 +58,12 @@ func main() {
 		}
 		fmt.Printf("received message: %v\n", m.Payload.Id)
 
-		var uMsg pb.UserRegistered
-		if err := json.Unmarshal(m.Payload.Payload, &uMsg); err != nil {
+		unmarshaler := protojson.UnmarshalOptions{
+			DiscardUnknown: true,
+		}
+
+		uMsg := pb.UserRegistered{}
+		if err := unmarshaler.Unmarshal(m.Payload.Payload, &uMsg); err != nil {
 			log.Println("unable to unmarshal message")
 			return
 		}

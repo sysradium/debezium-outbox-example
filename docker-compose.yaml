@@ -1,14 +1,16 @@
 services:
   users-service:
     image: golang:1.22.1-alpine
+    working_dir: /usr/src/app/users-service
     volumes:
-      - "./users-service:/usr/src/app"
+      - "./:/usr/src/app"
       - "$GOPATH/pkg/mod:/go/pkg/mod"
 
   notifications-service:
     image: golang:1.22.1-alpine
+    working_dir: /usr/src/app/notifications-service
     volumes:
-      - "./notifications-service:/usr/src/app"
+      - "./:/usr/src/app"
       - "$GOPATH/pkg/mod:/go/pkg/mod"
 
   db:

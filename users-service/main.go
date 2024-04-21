@@ -7,32 +7,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/events"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-// EventPublisher is responsible for publishing events to the outbox
-type EventPublisher struct {
+// OutboxPublisher is responsible for publishing events to the outbox
+type OutboxPublisher struct {
 	db *gorm.DB
 }
 
 // Outbox represents the structure of the outbox table
 type Outbox struct {
-	ID            uuid.UUID `gorm:"column:id;type:uuid;primary_key;"`
-	AggregateType string    `gorm:"column:aggregatetype;type:varchar(255);not null"`
-	AggregateID   string    `gorm:"column:aggregateid;type:varchar(255);not null"`
-	Type          string    `gorm:"column:type;type:varchar(255);not null"`
-	Payload       []byte    `gorm:"column:payload;type:jsonb;not null"`
+	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
+	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
+	AggregateID   string `gorm:"column:aggregateid;type:varchar(255);not null"`
+	Type          string `gorm:"column:type;type:varchar(255);not null"`
+	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
 }
 
-// NewEventPublisher creates a new instance of EventPublisher
-func NewEventPublisher(db *gorm.DB) *EventPublisher {
-	return &EventPublisher{db: db}
+func NewOutboxPublisher(db *gorm.DB) *OutboxPublisher {
+	return &OutboxPublisher{db: db}
 }
 
-// Publish marshals the UserRegistered struct and stores it in the outbox
-func (p *EventPublisher) Publish(event *events.UserRegistered) error {
+func (p *OutboxPublisher) Publish(event proto.Message) error {
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames: true,
 		Multiline:     false,
@@ -43,24 +42,25 @@ func (p *EventPublisher) Publish(event *events.UserRegistered) error {
 	}
 
 	outboxEntry := Outbox{
-		ID:            uuid.New(),
-		AggregateType: "UserRegistered",
-		//		AggregateID:   uuid.New().String(), // Assuming AggregateID is another UUID
-		Type:    "UserRegisteredEvent",
-		Payload: jsonBytes,
+		AggregateType: string(proto.MessageName(event).Name()),
+		AggregateID:   uuid.New().String(),
+		Payload:       jsonBytes,
 	}
 
-	// Save the entry to the database
-	if err := p.db.Create(&outboxEntry).Error; err != nil {
+	db := p.db.Begin()
+	res := db.Create(&outboxEntry)
+	if res.Error != nil {
 		return err
 	}
+
+	db.Delete(&outboxEntry)
+	db.Commit()
 
 	fmt.Println("Event published successfully")
 	return nil
 }
 
 func main() {
-	// Set up the database connection
 	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -70,20 +70,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Migrate the Outbox table
 	db.AutoMigrate(&Outbox{})
 
-	// Create an event publisher
-	publisher := NewEventPublisher(db)
+	publisher := NewOutboxPublisher(db)
 
-	// Create a UserRegistered event
 	userEvent := &events.UserRegistered{
 		Username:  "johndoe",
 		FirstName: "John",
 		LastName:  "Doe",
 	}
 
-	// Publish the event
 	if err := publisher.Publish(userEvent); err != nil {
 		log.Fatal(err)
 	}
