@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/events"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/repository"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"gorm.io/driver/postgres"
@@ -60,6 +61,24 @@ func (p *OutboxPublisher) Publish(event proto.Message) error {
 	return nil
 }
 
+func newOutboxMessageFromEvent(event proto.Proto) (Outbox, error) {
+	marshaler := protojson.MarshalOptions{
+		UseProtoNames: true,
+		Multiline:     false,
+	}
+	jsonBytes, err := marshaler.Marshal(event)
+	if err != nil {
+		return Outbox{}, err
+	}
+
+	return Outbox{
+		AggregateType: string(proto.MessageName(event).Name()),
+		AggregateID:   uuid.New().String(),
+		Payload:       jsonBytes,
+	}, nil
+
+}
+
 func main() {
 	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -70,17 +89,37 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db.AutoMigrate(&Outbox{})
+	db.AutoMigrate(&Outbox{}, &repository.User{})
 
-	publisher := NewOutboxPublisher(db)
+	userRepo := repository.NewUserRepository(db)
+	userRepo.Atomic(
+		func(r *repository.UserRepository) (repository.User, error) {
+			u, err := r.Create(
+				repository.User{
+					Username:  "johndoe",
+					FirstName: "John",
+					LastName:  "Doe",
+				},
+			)
+			if err != nil {
+				return u, err
+			}
 
-	userEvent := &events.UserRegistered{
-		Username:  "johndoe",
-		FirstName: "John",
-		LastName:  "Doe",
-	}
+			outboxEvent, err := newOutboxMessageFromEvent(&events.UserRegistered{
+				Username:  u.Username,
+				FirstName: u.FirstName,
+				LastName:  u.LastName,
+			})
 
-	if err := publisher.Publish(userEvent); err != nil {
-		log.Fatal(err)
-	}
+			if err != nil {
+				return u, err
+			}
+
+			if err := r.DB.Create(outboxEvent).Error; err != nil {
+				return u, err
+			}
+
+			return u, nil
+		},
+	)
 }
