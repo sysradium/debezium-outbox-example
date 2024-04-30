@@ -21,7 +21,7 @@ type OutboxPublisher struct {
 
 // Outbox represents the structure of the outbox table
 type Outbox struct {
-	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
+	ID            string `gorm:"column:id;type:uuid;primary_key"`
 	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
 	AggregateID   string `gorm:"column:aggregateid;type:varchar(255);not null"`
 	Type          string `gorm:"column:type;type:varchar(255);not null"`
@@ -61,7 +61,7 @@ func (p *OutboxPublisher) Publish(event proto.Message) error {
 	return nil
 }
 
-func newOutboxMessageFromEvent(event proto.Proto) (Outbox, error) {
+func newOutboxMessageFromEvent(event proto.Message) (Outbox, error) {
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames: true,
 		Multiline:     false,
@@ -72,6 +72,7 @@ func newOutboxMessageFromEvent(event proto.Proto) (Outbox, error) {
 	}
 
 	return Outbox{
+		ID:            uuid.NewString(),
 		AggregateType: string(proto.MessageName(event).Name()),
 		AggregateID:   uuid.New().String(),
 		Payload:       jsonBytes,
@@ -89,10 +90,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db.AutoMigrate(&Outbox{}, &repository.User{})
+	if err := db.AutoMigrate(&Outbox{}, &repository.User{}); err != nil {
+		log.Fatal(err)
+	}
 
 	userRepo := repository.NewUserRepository(db)
-	userRepo.Atomic(
+	if _, err := userRepo.Atomic(
 		func(r *repository.UserRepository) (repository.User, error) {
 			u, err := r.Create(
 				repository.User{
@@ -115,11 +118,13 @@ func main() {
 				return u, err
 			}
 
-			if err := r.DB.Create(outboxEvent).Error; err != nil {
+			if err := r.DB.Create(&outboxEvent).Error; err != nil {
 				return u, err
 			}
 
 			return u, nil
 		},
-	)
+	); err != nil {
+		log.Fatal(err)
+	}
 }

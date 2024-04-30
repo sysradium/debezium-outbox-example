@@ -22,7 +22,7 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 }
 
 func (r *UserRepository) Create(user User) (User, error) {
-	result := r.DB.Create(&user) // pass pointer of data to Create
+	result := r.DB.Create(&user)
 	if result.Error != nil {
 		return User{}, result.Error
 	}
