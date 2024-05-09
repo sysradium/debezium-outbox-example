@@ -34,6 +34,8 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+
 	var request UserCreationRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -42,8 +44,10 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	u, err := a.userRepo.Atomic(
-		func(r repository.Repository) (domain.User, error) {
+		ctx,
+		func(ctx context.Context, r repository.Repository) (domain.User, error) {
 			u, err := r.Create(
+				ctx,
 				domain.User{
 					Username:  request.Username,
 					FirstName: request.FirstName,
@@ -61,7 +65,7 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 				LastName:  u.LastName,
 			}
 
-			if err := r.Outbox().Store(context.Background(), uuid.NewString(), event); err != nil {
+			if err := r.Outbox().Store(ctx, uuid.NewString(), event); err != nil {
 				return u, err
 			}
 

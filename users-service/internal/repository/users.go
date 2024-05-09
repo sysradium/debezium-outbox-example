@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
@@ -24,8 +25,6 @@ func (u User) ToDomain() domain.User {
 		LastName:  u.LastName,
 	}
 }
-
-type TxFn func(repo Repository) (domain.User, error)
 
 type UserRepository struct {
 	db            *gorm.DB
@@ -51,24 +50,24 @@ func NewUserRepository(
 	}
 }
 
-func (r *UserRepository) Create(user domain.User) (domain.User, error) {
+func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
 	u := newFromDomainUser(user)
-	result := r.db.Create(&u)
+	result := r.db.WithContext(ctx).Create(&u)
 	if result.Error != nil {
 		return domain.User{}, result.Error
 	}
 	return u.ToDomain(), nil
 }
 
-func (r *UserRepository) Delete(id uint) error {
-	return r.db.Delete(&User{}, id).Error
+func (r *UserRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&User{}, id).Error
 }
 
 func (r *UserRepository) Outbox() outbox.Storer {
 	return r.outboxFactory(r.db)
 }
 
-func (r *UserRepository) Atomic(fn TxFn) (rUser domain.User, rErr error) {
+func (r *UserRepository) Atomic(ctx context.Context, fn TxFn) (rUser domain.User, rErr error) {
 	tx := r.db.Begin()
 
 	defer func() {
@@ -89,5 +88,5 @@ func (r *UserRepository) Atomic(fn TxFn) (rUser domain.User, rErr error) {
 	registry := *r
 	registry.db = tx
 
-	return fn(&registry)
+	return fn(ctx, &registry)
 }

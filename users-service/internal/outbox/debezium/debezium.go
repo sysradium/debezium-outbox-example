@@ -41,7 +41,7 @@ func NewOutboxPublisher(tx *gorm.DB) *OutboxPublisher {
 	}
 }
 
-func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Message) error {
+func (p *OutboxPublisher) Store(ctx context.Context, id string, event proto.Message) error {
 	jsonBytes, err := p.marshaler.Marshal(event)
 	if err != nil {
 		return err
@@ -53,11 +53,12 @@ func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Messag
 		Payload:       jsonBytes,
 	}
 
-	if res := p.tx.Create(&outboxEntry); res.Error != nil {
+	tx := p.tx.WithContext(ctx)
+	if res := tx.Create(&outboxEntry); res.Error != nil {
 		return err
 	}
 
-	p.tx.Delete(&outboxEntry)
+	tx.Delete(&outboxEntry)
 
 	p.logger.Info("Event published successfully", "id", id, "type", outboxEntry.AggregateType)
 
