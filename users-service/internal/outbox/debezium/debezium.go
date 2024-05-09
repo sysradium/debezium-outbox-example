@@ -2,7 +2,7 @@ package debezium
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -12,7 +12,9 @@ import (
 
 // OutboxPublisher is responsible for publishing events to the outbox
 type OutboxPublisher struct {
-	tx *gorm.DB
+	tx        *gorm.DB
+	logger    *slog.Logger
+	marshaler Marshaler
 }
 
 // Outbox represents the structure of the outbox table
@@ -24,16 +26,23 @@ type Outbox struct {
 	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
 }
 
+type Marshaler interface {
+	Marshal(proto.Message) ([]byte, error)
+}
+
 func NewOutboxPublisher(tx *gorm.DB) *OutboxPublisher {
-	return &OutboxPublisher{tx: tx}
+	return &OutboxPublisher{
+		tx:     tx,
+		logger: slog.Default(),
+		marshaler: protojson.MarshalOptions{
+			UseProtoNames: true,
+			Multiline:     false,
+		},
+	}
 }
 
 func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Message) error {
-	marshaler := protojson.MarshalOptions{
-		UseProtoNames: true,
-		Multiline:     false,
-	}
-	jsonBytes, err := marshaler.Marshal(event)
+	jsonBytes, err := p.marshaler.Marshal(event)
 	if err != nil {
 		return err
 	}
@@ -50,7 +59,8 @@ func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Messag
 
 	p.tx.Delete(&outboxEntry)
 
-	fmt.Println("Event published successfully")
+	p.logger.Info("Event published successfully", "id", id, "type", outboxEntry.AggregateType)
+
 	return nil
 }
 
