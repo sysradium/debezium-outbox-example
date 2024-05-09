@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
@@ -12,15 +13,16 @@ import (
 )
 
 type User struct {
-	ID        uint   `gorm:"primaryKey"`
-	Username  string `gorm:"index"`
-	FirstName string `gorm:"index"`
-	LastName  string `gorm:"index"`
+	ID        uint      `gorm:"primaryKey"`
+	UUID      uuid.UUID `gorm:"column:uuid;type:uuid;primary_key;default:uuid_generate_v4()"`
+	Username  string    `gorm:"index"`
+	FirstName string    `gorm:"index"`
+	LastName  string    `gorm:"index"`
 }
 
 func (u User) ToDomain() domain.User {
 	return domain.User{
-		ID:        u.ID,
+		ID:        u.UUID,
 		Username:  u.Username,
 		FirstName: u.FirstName,
 		LastName:  u.LastName,

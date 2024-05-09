@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
-	"strconv"
 
 	"net/http"
 
@@ -60,7 +59,7 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 			}
 
 			event := &events.UserRegistered{
-				Id:        strconv.FormatUint(uint64(u.ID), 10),
+				Id:        u.ID.String(),
 				Username:  u.Username,
 				FirstName: u.FirstName,
 				LastName:  u.LastName,
