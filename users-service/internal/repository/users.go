@@ -86,8 +86,8 @@ func (r *UserRepository) Atomic(fn TxFn) (rUser domain.User, rErr error) {
 		rErr = tx.Commit().Error
 	}()
 
-	registry := r
-	r.db = tx
+	registry := *r
+	registry.db = tx
 
-	return fn(registry)
+	return fn(&registry)
 }
