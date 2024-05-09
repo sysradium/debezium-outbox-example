@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ Repository[domain.User] = (*UserRepository)(nil)
+
 type User struct {
 	ID        uint      `gorm:"primaryKey"`
 	UUID      uuid.UUID `gorm:"column:uuid;type:uuid;primary_key;default:uuid_generate_v4()"`
@@ -81,7 +83,7 @@ func (r *UserRepository) Outbox() outbox.Storer {
 	return r.outboxFactory(r.db)
 }
 
-func (r *UserRepository) Atomic(ctx context.Context, fn TxFn) (rUser domain.User, rErr error) {
+func (r *UserRepository) Atomic(ctx context.Context, fn TxFn[domain.User]) (rUser domain.User, rErr error) {
 	tx := r.db.Begin()
 
 	defer func() {

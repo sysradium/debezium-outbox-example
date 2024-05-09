@@ -13,11 +13,10 @@ import (
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
 	nc "github.com/nats-io/nats.go"
 	natsJS "github.com/nats-io/nats.go/jetstream"
-	"github.com/sysradium/debezium-outbox-example/users-service/events"
-	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/app"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/app/commands"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/basic"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/repository"
@@ -26,17 +25,17 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-type Application struct {
-	userRepo repository.Repository
-}
-
 type UserCreationRequest struct {
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 }
 
-func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
+type Server struct {
+	a app.Application
+}
+
+func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "only POST is allowed", http.StatusMethodNotAllowed)
 		return
@@ -51,35 +50,11 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	u, err := a.userRepo.Atomic(
-		ctx,
-		func(ctx context.Context, r repository.Repository) (domain.User, error) {
-			u, err := r.Create(
-				ctx,
-				domain.User{
-					Username:  request.Username,
-					FirstName: request.FirstName,
-					LastName:  request.LastName,
-				},
-			)
-			if err != nil {
-				return u, err
-			}
-
-			event := &events.UserRegistered{
-				Id:        u.ID.String(),
-				Username:  u.Username,
-				FirstName: u.FirstName,
-				LastName:  u.LastName,
-			}
-
-			if err := r.Outbox().Store(ctx, uuid.NewString(), event); err != nil {
-				return u, err
-			}
-
-			return u, nil
-		},
-	)
+	u, err := s.a.Commands.CreateUser.Handle(ctx, commands.CreateUser{
+		Username:  request.Username,
+		FirstName: request.FirstName,
+		LastName:  request.LastName,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -117,14 +92,6 @@ func main() {
 	// A bit clumsy, but whatever for now
 	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
 
-	app := Application{
-		userRepo: repository.NewUserRepository(
-			db,
-			repository.WithLogger(logger),
-			repository.WithOutbox(basic.NewOutbox()),
-		),
-	}
-
 	publisher, err := newNatsPublisher(logger, "outbox.event")
 	if err != nil {
 		log.Fatal(err)
@@ -133,15 +100,23 @@ func main() {
 	pub := basic.NewWorker(
 		db,
 		publisher,
-		basic.WithLogger(logger.WithGroup("worker-1")),
+		basic.WithLogger(logger),
 		basic.WithPollingInterval(time.Millisecond*50),
 		basic.WithTopicPrefix("outbox.event"),
 	)
 	go pub.Start()
+	defer pub.Stop()
 
-	http.HandleFunc("/users", app.CreateUser)
+	srv := Server{
+		a: app.NewApplication(repository.NewUserRepository(
+			db,
+			repository.WithLogger(logger),
+			repository.WithOutbox(basic.NewOutbox()),
+		))}
+
+	http.HandleFunc("/users", srv.CreateUser)
 	http.ListenAndServe(":8080", nil)
-	pub.Stop()
+
 }
 
 func newNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, error) {
