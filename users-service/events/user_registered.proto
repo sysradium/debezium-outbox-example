@@ -3,7 +3,8 @@ syntax = "proto3";
 package user;
 
 message UserRegistered {
-    string username  = 1;
-    string first_name = 2;
-    string last_name  = 3;
+    string id = 1;
+    string username  = 2;
+    string first_name = 3;
+    string last_name  = 4;
 }

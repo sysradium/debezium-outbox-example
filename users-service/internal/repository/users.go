@@ -3,6 +3,9 @@ package repository
 import (
 	"fmt"
 
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
 	"gorm.io/gorm"
 )
 
@@ -13,31 +16,60 @@ type User struct {
 	LastName  string `gorm:"index"`
 }
 
-type UserRepository struct {
-	DB *gorm.DB
-}
-
-func NewUserRepository(db *gorm.DB) *UserRepository {
-	return &UserRepository{DB: db}
-}
-
-func (r *UserRepository) Create(user User) (User, error) {
-	result := r.DB.Create(&user)
-	if result.Error != nil {
-		return User{}, result.Error
+func (u User) ToDomain() domain.User {
+	return domain.User{
+		ID:        u.ID,
+		Username:  u.Username,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
 	}
-	return user, nil
+}
+
+type TxFn func(repo Repository) (domain.User, error)
+
+type UserRepository struct {
+	db            *gorm.DB
+	outboxFactory func(*gorm.DB) outbox.Storer
+}
+
+func newFromDomainUser(u domain.User) User {
+	return User{
+		Username:  u.Username,
+		LastName:  u.LastName,
+		FirstName: u.FirstName,
+	}
+}
+
+func NewUserRepository(
+	db *gorm.DB,
+) *UserRepository {
+	return &UserRepository{
+		db: db,
+		outboxFactory: func(db *gorm.DB) outbox.Storer {
+			return debezium.NewOutboxPublisher(db)
+		},
+	}
+}
+
+func (r *UserRepository) Create(user domain.User) (domain.User, error) {
+	u := newFromDomainUser(user)
+	result := r.db.Create(&u)
+	if result.Error != nil {
+		return domain.User{}, result.Error
+	}
+	return u.ToDomain(), nil
 }
 
 func (r *UserRepository) Delete(id uint) error {
-	result := r.DB.Delete(&User{}, id)
-	return result.Error
+	return r.db.Delete(&User{}, id).Error
 }
 
-type TxFn func(repo *UserRepository) (User, error)
+func (r *UserRepository) Outbox() outbox.Storer {
+	return r.outboxFactory(r.db)
+}
 
-func (r *UserRepository) Atomic(fn TxFn) (rUser User, rErr error) {
-	tx := r.DB.Begin()
+func (r *UserRepository) Atomic(fn TxFn) (rUser domain.User, rErr error) {
+	tx := r.db.Begin()
 
 	defer func() {
 		if p := recover(); p != nil {
@@ -54,10 +86,8 @@ func (r *UserRepository) Atomic(fn TxFn) (rUser User, rErr error) {
 		rErr = tx.Commit().Error
 	}()
 
-	registry := &UserRepository{
-		DB: tx,
-	}
+	registry := r
+	r.db = tx
 
 	return fn(registry)
-
 }
