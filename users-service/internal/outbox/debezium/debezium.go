@@ -5,19 +5,20 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
 )
 
-// OutboxPublisher is responsible for publishing events to the outbox
+var _ outbox.Storer = (*OutboxPublisher)(nil)
+
 type OutboxPublisher struct {
 	tx        *gorm.DB
 	logger    *slog.Logger
 	marshaler Marshaler
 }
 
-// Outbox represents the structure of the outbox table
 type Outbox struct {
 	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
 	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
@@ -30,21 +31,22 @@ type Marshaler interface {
 	Marshal(proto.Message) ([]byte, error)
 }
 
-func NewOutboxPublisher(tx *gorm.DB, opts ...option) *OutboxPublisher {
-	pub := &OutboxPublisher{
-		tx:     tx,
-		logger: slog.Default(),
-		marshaler: protojson.MarshalOptions{
-			UseProtoNames: true,
-			Multiline:     false,
-		},
-	}
+func NewOutboxPublisher(opts ...option) func(*gorm.DB) outbox.Storer {
+	return func(tx *gorm.DB) outbox.Storer {
+		pub := &OutboxPublisher{
+			tx:     tx,
+			logger: slog.Default(),
+			marshaler: protojson.MarshalOptions{
+				UseProtoNames: true,
+				Multiline:     false,
+			},
+		}
 
-	for _, o := range opts {
-		o(pub)
+		for _, o := range opts {
+			o(pub)
+		}
+		return pub
 	}
-
-	return pub
 }
 
 func (p *OutboxPublisher) Store(ctx context.Context, id string, event proto.Message) error {

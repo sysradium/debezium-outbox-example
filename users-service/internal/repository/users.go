@@ -53,11 +53,9 @@ func NewUserRepository(
 		db:     db,
 		logger: logger,
 	}
-	u.outboxFactory = func(db *gorm.DB) outbox.Storer {
-		return debezium.NewOutboxPublisher(db, debezium.WithLogger(
-			u.logger.With("logger", "debezium.outbox"),
-		))
-	}
+	u.outboxFactory = debezium.NewOutboxPublisher(debezium.WithLogger(
+		u.logger.With("logger", "debezium.outbox"),
+	))
 
 	for _, o := range opts {
 		o(u)

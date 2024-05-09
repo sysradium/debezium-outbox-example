@@ -32,7 +32,7 @@ func main() {
 		msg.Ack()
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("unable to subscribe: %v", err.Error())
 	}
 
 	defer sub.Unsubscribe()
