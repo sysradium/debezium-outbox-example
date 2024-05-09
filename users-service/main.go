@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
+	"os"
 	"strconv"
 
 	"net/http"
@@ -85,20 +86,26 @@ func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	logger := slog.Default()
+
 	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		}})
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		os.Exit(1)
 	}
 
 	// A bit clumsy, but whatever for now
 	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
 
 	app := Application{
-		userRepo: repository.NewUserRepository(db),
+		userRepo: repository.NewUserRepository(
+			db,
+			repository.WithLogger(logger),
+		),
 	}
 
 	http.HandleFunc("/users", app.CreateUser)

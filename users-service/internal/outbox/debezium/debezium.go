@@ -30,8 +30,8 @@ type Marshaler interface {
 	Marshal(proto.Message) ([]byte, error)
 }
 
-func NewOutboxPublisher(tx *gorm.DB) *OutboxPublisher {
-	return &OutboxPublisher{
+func NewOutboxPublisher(tx *gorm.DB, opts ...option) *OutboxPublisher {
+	pub := &OutboxPublisher{
 		tx:     tx,
 		logger: slog.Default(),
 		marshaler: protojson.MarshalOptions{
@@ -39,6 +39,12 @@ func NewOutboxPublisher(tx *gorm.DB) *OutboxPublisher {
 			Multiline:     false,
 		},
 	}
+
+	for _, o := range opts {
+		o(pub)
+	}
+
+	return pub
 }
 
 func (p *OutboxPublisher) Store(ctx context.Context, id string, event proto.Message) error {
@@ -58,6 +64,8 @@ func (p *OutboxPublisher) Store(ctx context.Context, id string, event proto.Mess
 		return err
 	}
 
+	// We do not need the entry itself to be preserved.
+	// We only care about the event of record creation, which triggers debezium to generate an event
 	tx.Delete(&outboxEntry)
 
 	p.logger.Info("Event published successfully", "id", id, "type", outboxEntry.AggregateType)

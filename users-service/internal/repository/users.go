@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
@@ -29,6 +30,7 @@ func (u User) ToDomain() domain.User {
 type UserRepository struct {
 	db            *gorm.DB
 	outboxFactory func(*gorm.DB) outbox.Storer
+	logger        *slog.Logger
 }
 
 func newFromDomainUser(u domain.User) User {
@@ -41,13 +43,25 @@ func newFromDomainUser(u domain.User) User {
 
 func NewUserRepository(
 	db *gorm.DB,
+	opts ...option,
 ) *UserRepository {
-	return &UserRepository{
-		db: db,
-		outboxFactory: func(db *gorm.DB) outbox.Storer {
-			return debezium.NewOutboxPublisher(db)
-		},
+	logger := slog.Default()
+
+	u := &UserRepository{
+		db:     db,
+		logger: logger,
 	}
+	u.outboxFactory = func(db *gorm.DB) outbox.Storer {
+		return debezium.NewOutboxPublisher(db, debezium.WithLogger(
+			u.logger.With("logger", "debezium.outbox"),
+		))
+	}
+
+	for _, o := range opts {
+		o(u)
+	}
+
+	return u
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (domain.User, error) {
