@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"strconv"
+
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/events"
@@ -19,29 +22,32 @@ type Application struct {
 	userRepo repository.Repository
 }
 
-func main() {
-	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		NamingStrategy: schema.NamingStrategy{
-			SingularTable: true,
-		}})
-	if err != nil {
-		log.Fatal(err)
+type UserCreationRequest struct {
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+func (a *Application) CreateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "only POST is allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
-	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
-
-	app := Application{
-		userRepo: repository.NewUserRepository(db),
+	var request UserCreationRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+	defer r.Body.Close()
 
-	if _, err := app.userRepo.Atomic(
+	u, err := a.userRepo.Atomic(
 		func(r repository.Repository) (domain.User, error) {
 			u, err := r.Create(
 				domain.User{
-					Username:  "johndoe",
-					FirstName: "John",
-					LastName:  "Doe",
+					Username:  request.Username,
+					FirstName: request.FirstName,
+					LastName:  request.LastName,
 				},
 			)
 			if err != nil {
@@ -61,7 +67,36 @@ func main() {
 
 			return u, nil
 		},
-	); err != nil {
+	)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(u); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func main() {
+	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		}})
+	if err != nil {
 		log.Fatal(err)
 	}
+
+	// A bit clumsy, but whatever for now
+	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
+
+	app := Application{
+		userRepo: repository.NewUserRepository(db),
+	}
+
+	http.HandleFunc("/users", app.CreateUser)
+	http.ListenAndServe(":8080", nil)
 }

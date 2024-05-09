@@ -12,7 +12,7 @@ import (
 
 // OutboxPublisher is responsible for publishing events to the outbox
 type OutboxPublisher struct {
-	db *gorm.DB
+	tx *gorm.DB
 }
 
 // Outbox represents the structure of the outbox table
@@ -24,8 +24,8 @@ type Outbox struct {
 	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
 }
 
-func NewOutboxPublisher(db *gorm.DB) *OutboxPublisher {
-	return &OutboxPublisher{db: db}
+func NewOutboxPublisher(tx *gorm.DB) *OutboxPublisher {
+	return &OutboxPublisher{tx: tx}
 }
 
 func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Message) error {
@@ -44,12 +44,11 @@ func (p *OutboxPublisher) Store(_ context.Context, id string, event proto.Messag
 		Payload:       jsonBytes,
 	}
 
-	db := p.db.Begin()
-	if res := db.Create(&outboxEntry); res.Error != nil {
+	if res := p.tx.Create(&outboxEntry); res.Error != nil {
 		return err
 	}
 
-	db.Delete(&outboxEntry)
+	p.tx.Delete(&outboxEntry)
 
 	fmt.Println("Event published successfully")
 	return nil
