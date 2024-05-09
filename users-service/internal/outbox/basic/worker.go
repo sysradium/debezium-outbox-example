@@ -64,9 +64,22 @@ func (p *Worker) Stop() {
 	<-p.done
 }
 
-func (p *Worker) processMessages(ctx context.Context, batchSize int) error {
+func (p *Worker) processMessages(ctx context.Context, batchSize int) (rErr error) {
 	db := p.db.WithContext(ctx).Begin()
-	defer db.Commit()
+	defer func() {
+		if p := recover(); p != nil {
+			_ = db.Rollback()
+			panic(p)
+		}
+		if rErr != nil {
+			xerr := db.Rollback().Error
+			if xerr != nil {
+				rErr = fmt.Errorf("%s: %w", xerr.Error(), rErr)
+			}
+			return
+		}
+		rErr = db.Commit().Error
+	}()
 
 	var messages []Outbox
 	res := db.Limit(batchSize).Clauses(
