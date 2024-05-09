@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -15,7 +14,6 @@ import (
 type Worker struct {
 	db              *gorm.DB
 	logger          *slog.Logger
-	marshaler       Marshaler
 	pollingInterval time.Duration
 	publisher       message.Publisher
 	batchSize       int
@@ -28,12 +26,8 @@ type Worker struct {
 func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &Worker{
-		db:     db,
-		logger: slog.Default(),
-		marshaler: protojson.MarshalOptions{
-			UseProtoNames: true,
-			Multiline:     false,
-		},
+		db:        db,
+		logger:    slog.Default(),
 		publisher: publisher,
 		batchSize: 10000,
 		ctx:       ctx,
