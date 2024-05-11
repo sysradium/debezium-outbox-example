@@ -98,7 +98,7 @@ func (p *Worker) processMessages(ctx context.Context, batchSize int) (rErr error
 
 	for _, m := range messages {
 		if err := p.publisher.Publish(
-			fmt.Sprintf("%v.event.%v", p.topicPrefix, m.AggregateType),
+			fmt.Sprintf("%v.%v", p.topicPrefix, m.AggregateType),
 			message.NewMessage(m.ID, m.Payload),
 		); err != nil {
 			p.logger.Error("unable to publish message", "error", err)

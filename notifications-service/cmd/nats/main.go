@@ -3,39 +3,40 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/google/uuid"
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	nc "github.com/nats-io/nats.go"
 	"github.com/sysradium/debezium-outbox-example/notifications-service/internal/handlers"
 )
 
 func main() {
 	ctx := context.Background()
+	logger := slog.Default()
 
-	n, err := nc.Connect("nats://nats:4222")
+	subscriber, err := nats.NewSubscriber(
+		nats.SubscriberConfig{
+			URL:         "nats://nats:4222",
+			NatsOptions: []nc.Option{},
+			JetStream: nats.JetStreamConfig{
+				SubscribeOptions: []nc.SubOpt{
+					nc.DeliverLast(),
+					nc.AckExplicit(),
+				},
+				TrackMsgId: true,
+				AckAsync:   false,
+			},
+		}, watermill.NewSlogLogger(logger),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer n.Close()
 
-	js, err := n.JetStream()
+	messages, err := subscriber.Subscribe(ctx, "outbox.event.UserRegistered")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	messages := make(chan *message.Message)
 	handler := handlers.NewUserReigsterdHandler(messages)
-
-	sub, err := js.Subscribe("outbox.event.UserRegistered", func(msg *nc.Msg) {
-		messages <- message.NewMessage(uuid.NewString(), msg.Data)
-		msg.Ack()
-	})
-	if err != nil {
-		log.Fatalf("unable to subscribe: %v", err.Error())
-	}
-
-	defer sub.Unsubscribe()
-
 	handler.Start(ctx)
 }

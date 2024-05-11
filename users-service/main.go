@@ -1,24 +1,18 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
-	"github.com/ThreeDotsLabs/watermill/message"
-	nc "github.com/nats-io/nats.go"
-	natsJS "github.com/nats-io/nats.go/jetstream"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app/commands"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/basic"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/publishers"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/repository"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -67,15 +61,6 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 }
 
-type Marshaler struct{}
-
-func (*Marshaler) Marshal(topic string, m *message.Message) (*nc.Msg, error) {
-	natsMsg := nc.NewMsg(topic)
-	natsMsg.Data = m.Payload
-
-	return natsMsg, nil
-}
-
 func main() {
 	logger := slog.Default()
 
@@ -92,20 +77,24 @@ func main() {
 	// A bit clumsy, but whatever for now
 	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
 
-	publisher, err := newNatsPublisher(logger, "outbox.event")
+	publisher, err := publishers.NewNatsPublisher(logger, "outbox.event")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	pub := basic.NewWorker(
+	worker := basic.NewWorker(
 		db,
 		publisher,
 		basic.WithLogger(logger),
 		basic.WithPollingInterval(time.Millisecond*50),
 		basic.WithTopicPrefix("outbox.event"),
 	)
-	go pub.Start()
-	defer pub.Stop()
+	go worker.Start()
+	defer func() {
+		logger.Debug("shutting worker down")
+		worker.Stop()
+		logger.Debug("exiting")
+	}()
 
 	srv := Server{
 		a: app.NewApplication(repository.NewUserRepository(
@@ -116,51 +105,4 @@ func main() {
 
 	http.HandleFunc("/users", srv.CreateUser)
 	http.ListenAndServe(":8080", nil)
-
-}
-
-func newNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, error) {
-	conn, err := nc.Connect(
-		"nats://nats:4222",
-		nc.RetryOnFailedConnect(true),
-		nc.Timeout(30*time.Second),
-		nc.ReconnectWait(1*time.Second),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-	js, err := natsJS.New(conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := js.CreateOrUpdateStream(context.Background(),
-		natsJS.StreamConfig{
-			Name:     "DebeziumEvents",
-			Subjects: []string{fmt.Sprintf("%s.>", prefix)},
-		},
-	); err != nil {
-		return nil, err
-	}
-
-	publisher, err := nats.NewPublisherWithNatsConn(
-		conn,
-		nats.PublisherPublishConfig{
-			Marshaler:         &Marshaler{},
-			SubjectCalculator: nats.DefaultSubjectCalculator,
-			JetStream: nats.JetStreamConfig{
-				ConnectOptions: nil,
-				SubscribeOptions: []nc.SubOpt{
-					nc.DeliverAll(),
-					nc.AckExplicit(),
-				},
-				PublishOptions: nil,
-				DurablePrefix:  "",
-			},
-		},
-		watermill.NewSlogLogger(logger),
-	)
-
-	return publisher, err
 }
