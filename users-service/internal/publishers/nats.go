@@ -8,7 +8,6 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
-	"github.com/ThreeDotsLabs/watermill/message"
 	nc "github.com/nats-io/nats.go"
 	natsJS "github.com/nats-io/nats.go/jetstream"
 )
@@ -41,7 +40,7 @@ func NewNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, erro
 	publisher, err := nats.NewPublisherWithNatsConn(
 		conn,
 		nats.PublisherPublishConfig{
-			Marshaler:         &Marshaler{},
+			Marshaler:         &nats.NATSMarshaler{},
 			SubjectCalculator: nats.DefaultSubjectCalculator,
 			JetStream: nats.JetStreamConfig{
 				ConnectOptions: nil,
@@ -51,19 +50,11 @@ func NewNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, erro
 				},
 				PublishOptions: nil,
 				DurablePrefix:  "",
+				TrackMsgId:     true,
 			},
 		},
 		watermill.NewSlogLogger(logger),
 	)
 
 	return publisher, err
-}
-
-type Marshaler struct{}
-
-func (*Marshaler) Marshal(topic string, m *message.Message) (*nc.Msg, error) {
-	natsMsg := nc.NewMsg(topic)
-	natsMsg.Data = m.Payload
-
-	return natsMsg, nil
 }
