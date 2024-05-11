@@ -10,6 +10,7 @@ import (
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app/commands"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/basic"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/publishers"
@@ -61,8 +62,16 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 }
 
+type OutboxType int
+
+const (
+	OUTBOX_TYPE_DEBEZIUM OutboxType = iota + 1
+	OUTBOX_TYPE_BASIC
+)
+
 func main() {
 	logger := slog.Default()
+	outbox := OUTBOX_TYPE_BASIC
 
 	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -77,32 +86,43 @@ func main() {
 	// A bit clumsy, but whatever for now
 	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
 
-	publisher, err := publishers.NewNatsPublisher(logger, "outbox.event")
-	if err != nil {
-		log.Fatal(err)
-	}
+	var repo repository.Repository[domain.User]
+	if outbox == OUTBOX_TYPE_BASIC {
+		publisher, err := publishers.NewNatsPublisher(logger, "outbox")
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	worker := basic.NewWorker(
-		db,
-		publisher,
-		basic.WithLogger(logger),
-		basic.WithPollingInterval(time.Millisecond*50),
-		basic.WithTopicPrefix("outbox.event"),
-	)
-	go worker.Start()
-	defer func() {
-		logger.Debug("shutting worker down")
-		worker.Stop()
-		logger.Debug("exiting")
-	}()
-
-	srv := Server{
-		a: app.NewApplication(repository.NewUserRepository(
+		worker := basic.NewWorker(
+			db,
+			publisher,
+			basic.WithLogger(logger),
+			basic.WithPollingInterval(time.Millisecond*50),
+			basic.WithTopicPrefix("outbox.event"),
+		)
+		go worker.Start()
+		defer func() {
+			logger.Debug("shutting worker down")
+			worker.Stop()
+			logger.Debug("exiting")
+		}()
+		repo = repository.NewUserRepository(
 			db,
 			repository.WithLogger(logger),
 			repository.WithOutbox(basic.NewOutbox()),
-		))}
+		)
 
+	} else if outbox == OUTBOX_TYPE_DEBEZIUM {
+		repo = repository.NewUserRepository(
+			db,
+			repository.WithLogger(logger),
+			repository.WithOutbox(debezium.NewOutboxPublisher()),
+		)
+	}
+
+	srv := Server{
+		a: app.NewApplication(repo),
+	}
 	http.HandleFunc("/users", srv.CreateUser)
 	http.ListenAndServe(":8080", nil)
 }

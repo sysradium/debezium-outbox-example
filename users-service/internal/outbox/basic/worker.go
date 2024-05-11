@@ -21,17 +21,19 @@ type Worker struct {
 	done            chan struct{}
 	ctx             context.Context
 	cancel          context.CancelFunc
+	tableName       string
 }
 
 func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &Worker{
-		db:        db,
+		db:        db.Table("my-outbox"),
 		logger:    slog.Default(),
 		publisher: publisher,
 		batchSize: 10000,
 		ctx:       ctx,
 		cancel:    cancel,
+		tableName: "my-outbox",
 	}
 
 	for _, o := range opts {
@@ -42,6 +44,7 @@ func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *
 }
 
 func (p *Worker) Start() {
+	p.db.Table(p.tableName).AutoMigrate(&Outbox{})
 	ticker := time.NewTicker(p.pollingInterval)
 	defer func() {
 		ticker.Stop()

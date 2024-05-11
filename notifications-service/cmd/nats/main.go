@@ -17,7 +17,8 @@ func main() {
 
 	subscriber, err := nats.NewSubscriber(
 		nats.SubscriberConfig{
-			URL: "nats://nats:4222",
+			URL:         "nats://nats:4222",
+			Unmarshaler: &nats.NATSMarshaler{},
 			JetStream: nats.JetStreamConfig{
 				SubscribeOptions: []nc.SubOpt{
 					nc.DeliverLast(),

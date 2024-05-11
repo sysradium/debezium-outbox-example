@@ -30,7 +30,7 @@ func NewNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, erro
 
 	if _, err := js.CreateOrUpdateStream(context.Background(),
 		natsJS.StreamConfig{
-			Name:     "DebeziumEvents",
+			Name:     "OUTBOX",
 			Subjects: []string{fmt.Sprintf("%s.>", prefix)},
 		},
 	); err != nil {

@@ -14,7 +14,6 @@ type Outbox struct {
 	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
 	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
 	AggregateID   string `gorm:"column:aggregateid;type:varchar(255);not null"`
-	Type          string `gorm:"column:type;type:varchar(255);not null"`
 	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
 }
 
@@ -31,7 +30,7 @@ type OutboxStorage struct {
 func NewOutbox() func(*gorm.DB) outbox.Storer {
 	return func(tx *gorm.DB) outbox.Storer {
 		pub := &OutboxStorage{
-			tx:     tx,
+			tx:     tx.Table("my-outbox"),
 			logger: slog.Default(),
 			marshaler: protojson.MarshalOptions{
 				UseProtoNames: true,

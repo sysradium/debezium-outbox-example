@@ -49,7 +49,7 @@ services:
 
   debezium:
     platform: linux/amd64
-    image: debezium/server
+    image: debezium/server:2.6
     volumes:
       - debezium-data:/debezium/data
       - ./debezium/application-nats.properties:/debezium/conf/application.properties

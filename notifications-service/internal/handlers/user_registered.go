@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/spewerspew/spew"
+	"github.com/sysradium/debezium-outbox-example/notifications-service/internal/debezium"
 	pb "github.com/sysradium/debezium-outbox-example/users-service/events"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -42,24 +45,25 @@ func (a *UserRegisteredHandler) Start(ctx context.Context) {
 }
 
 func (a *UserRegisteredHandler) Handle(msg *message.Message) error {
-	// var dMsg debezium.Root
-	// if err := json.Unmarshal(msg.Payload, &dMsg); err != nil {
-	// 	return err
-	// }
-	// fmt.Printf("received message: %v\n", dMsg.Payload.Id)
+	var eventPayload []byte
+
+	var dMsg debezium.Root
+	if err := json.Unmarshal(msg.Payload, &dMsg); err != nil || len(dMsg.Payload.Payload) == 0 {
+		fmt.Println("unable to decode, maybe not a debezium event")
+		eventPayload = msg.Payload
+	} else {
+		eventPayload = dMsg.Payload.Payload
+	}
 
 	unmarshaler := protojson.UnmarshalOptions{
 		DiscardUnknown: true,
 	}
 
-	spew.Dump(string(msg.Payload))
 	uMsg := pb.UserRegistered{}
-	if err := unmarshaler.Unmarshal(msg.Payload, &uMsg); err != nil {
+	if err := unmarshaler.Unmarshal(eventPayload, &uMsg); err != nil {
+		spew.Dump(string(eventPayload))
 		return err
 	}
-	// if err := unmarshaler.Unmarshal(dMsg.Payload.Payload, &uMsg); err != nil {
-	// 	return err
-	// }
 
 	spew.Dump(uMsg)
 	return nil
