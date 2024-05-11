@@ -11,11 +11,16 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+type Publisher interface {
+	Publish(topic string, messages ...*message.Message) error
+	Close() error
+}
+
 type Worker struct {
 	db              *gorm.DB
 	logger          *slog.Logger
 	pollingInterval time.Duration
-	publisher       message.Publisher
+	publisher       Publisher
 	batchSize       int
 	topicPrefix     string
 	done            chan struct{}
@@ -34,6 +39,7 @@ func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *
 		ctx:       ctx,
 		cancel:    cancel,
 		tableName: "my-outbox",
+		done:      make(chan struct{}),
 	}
 
 	for _, o := range opts {
@@ -48,7 +54,7 @@ func (p *Worker) Start() {
 	ticker := time.NewTicker(p.pollingInterval)
 	defer func() {
 		ticker.Stop()
-		p.done <- struct{}{}
+		close(p.done)
 	}()
 
 	for {
@@ -63,6 +69,7 @@ func (p *Worker) Start() {
 }
 
 func (p *Worker) Stop() {
+	p.publisher.Close()
 	p.cancel()
 	<-p.done
 }

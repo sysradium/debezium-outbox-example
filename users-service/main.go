@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app"
@@ -102,9 +105,9 @@ func main() {
 		)
 		go worker.Start()
 		defer func() {
-			logger.Debug("shutting worker down")
+			logger.Info("shutting worker down")
 			worker.Stop()
-			logger.Debug("exiting")
+			logger.Info("exiting")
 		}()
 		repo = repository.NewUserRepository(
 			db,
@@ -123,6 +126,24 @@ func main() {
 	srv := Server{
 		a: app.NewApplication(repo),
 	}
-	http.HandleFunc("/users", srv.CreateUser)
-	http.ListenAndServe(":8080", nil)
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users", srv.CreateUser)
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	go func() {
+		server.ListenAndServe()
+	}()
+
+	<-sigs
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	server.Shutdown(ctx)
+	cancel()
 }
