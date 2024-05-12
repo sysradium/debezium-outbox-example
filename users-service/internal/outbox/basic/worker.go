@@ -62,7 +62,9 @@ func (p *Worker) Start() {
 		case <-p.ctx.Done():
 			return
 		case <-ticker.C:
-			p.processMessages(p.ctx, p.batchSize)
+			if err := p.processMessages(p.ctx, p.batchSize); err != nil {
+				p.logger.Error("failed to process messages", "error", err)
+			}
 		}
 	}
 
@@ -111,7 +113,7 @@ func (p *Worker) processMessages(ctx context.Context, batchSize int) (rErr error
 			fmt.Sprintf("%v.%v", p.topicPrefix, m.AggregateType),
 			message.NewMessage(m.ID, m.Payload),
 		); err != nil {
-			p.logger.Error("unable to publish message", "error", err)
+			return fmt.Errorf("unable to publish event: %w", err)
 		}
 	}
 
