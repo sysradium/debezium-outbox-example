@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	pb "github.com/sysradium/debezium-outbox-example/users-service/events"
@@ -10,11 +10,13 @@ import (
 
 type UserRegisteredHandler struct {
 	base
+	logger *slog.Logger
 }
 
 func NewUserReigsterdHandler(ch <-chan *message.Message) *UserRegisteredHandler {
 	return &UserRegisteredHandler{
-		base: newBase(ch),
+		base:   newBase(ch),
+		logger: slog.Default(),
 	}
 }
 
@@ -29,6 +31,6 @@ func (a *UserRegisteredHandler) Handle(msg *message.Message) error {
 		return err
 	}
 
-	fmt.Println(uMsg.String())
+	a.logger.Info("User registered", "user", uMsg.String())
 	return nil
 }

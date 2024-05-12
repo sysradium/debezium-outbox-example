@@ -26,6 +26,7 @@ func newBase(ch <-chan *message.Message) base {
 		ch:                  ch,
 		defaultUnmarshaler:  DefaultUnmarshaler{},
 		debeziumUnmarshaler: DebeziumUnmarshaler{},
+		logger:              slog.Default(),
 	}
 
 }
