@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/spewerspew/spew"
@@ -14,34 +13,17 @@ import (
 )
 
 type UserRegisteredHandler struct {
-	ch <-chan *message.Message
+	base
 }
 
 func NewUserReigsterdHandler(ch <-chan *message.Message) *UserRegisteredHandler {
 	return &UserRegisteredHandler{
-		ch: ch,
+		base: base{ch: ch},
 	}
 }
 
-func (a *UserRegisteredHandler) Start(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg, ok := <-a.ch:
-			if !ok {
-				return
-			}
-
-			if err := a.Handle(msg); err != nil {
-				log.Printf("unable to process message: %v", err)
-				msg.Nack()
-				continue
-			}
-
-			msg.Ack()
-		}
-	}
+func (a *UserRegisteredHandler) Start(ctx context.Context) error {
+	return a.base.Start(ctx, a.Handle)
 }
 
 func (a *UserRegisteredHandler) Handle(msg *message.Message) error {
