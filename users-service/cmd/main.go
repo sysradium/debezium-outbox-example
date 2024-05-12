@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"log/slog"
 	"net/http"
@@ -12,58 +11,16 @@ import (
 	"time"
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/app"
-	"github.com/sysradium/debezium-outbox-example/users-service/internal/app/commands"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/basic"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
+	"github.com/sysradium/debezium-outbox-example/users-service/internal/ports"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/publishers"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/repository"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
-
-type UserCreationRequest struct {
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-}
-
-type Server struct {
-	a app.Application
-}
-
-func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "only POST is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	ctx := r.Context()
-
-	var request UserCreationRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
-	u, err := s.a.Commands.CreateUser.Handle(ctx, commands.CreateUser{
-		Username:  request.Username,
-		FirstName: request.FirstName,
-		LastName:  request.LastName,
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(u); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-}
 
 type OutboxType int
 
@@ -74,6 +31,7 @@ const (
 
 func main() {
 	logger := slog.Default()
+	// hardcoded just for an example
 	outbox := OUTBOX_TYPE_BASIC
 
 	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
@@ -103,12 +61,14 @@ func main() {
 			basic.WithPollingInterval(time.Millisecond*50),
 			basic.WithTopicPrefix("outbox.event"),
 		)
+
 		go worker.Start()
 		defer func() {
 			logger.Info("shutting worker down")
 			worker.Stop()
 			logger.Info("exiting")
 		}()
+
 		repo = repository.NewUserRepository(
 			db,
 			repository.WithLogger(logger),
@@ -123,13 +83,7 @@ func main() {
 		)
 	}
 
-	srv := Server{
-		a: app.NewApplication(repo),
-	}
-
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
+	srv := ports.NewHTTP(app.NewApplication(repo))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users", srv.CreateUser)
 	server := &http.Server{
@@ -138,9 +92,12 @@ func main() {
 	}
 
 	go func() {
+		logger.Info("shutting http server down")
 		server.ListenAndServe()
 	}()
 
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
