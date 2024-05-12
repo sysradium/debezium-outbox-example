@@ -5,13 +5,29 @@ import (
 	"log/slog"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"google.golang.org/protobuf/proto"
 )
+
+type unmarshaler interface {
+	Unmarshal(msg *message.Message, v proto.Message) error
+}
 
 type handler func(*message.Message) error
 
 type base struct {
-	ch     <-chan *message.Message
-	logger *slog.Logger
+	ch                  <-chan *message.Message
+	logger              *slog.Logger
+	defaultUnmarshaler  unmarshaler
+	debeziumUnmarshaler unmarshaler
+}
+
+func newBase(ch <-chan *message.Message) base {
+	return base{
+		ch:                  ch,
+		defaultUnmarshaler:  DefaultUnmarshaler{},
+		debeziumUnmarshaler: DebeziumUnmarshaler{},
+	}
+
 }
 
 func (b *base) Start(ctx context.Context, h handler) error {
@@ -33,4 +49,14 @@ func (b *base) Start(ctx context.Context, h handler) error {
 			msg.Ack()
 		}
 	}
+}
+
+func (b *base) unarmshal(msg *message.Message, out proto.Message) error {
+	if err := b.debeziumUnmarshaler.Unmarshal(msg, out); err != nil {
+		if err := b.defaultUnmarshaler.Unmarshal(msg, out); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
