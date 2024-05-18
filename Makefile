@@ -5,3 +5,6 @@ build-images: $(foreach svc,notifications-service users-service,build-image-$(sv
 
 build-image-%:
 	docker build -t outbox-$* --build-arg SERVICE=$* .
+
+mirrord-%:
+	cd $*; mirrord exec -f ../mirrord.json make run --target deployment/$*

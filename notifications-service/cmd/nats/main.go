@@ -22,8 +22,7 @@ func main() {
 			Unmarshaler: &nats.NATSMarshaler{},
 			JetStream: nats.JetStreamConfig{
 				SubscribeOptions: []nc.SubOpt{
-					nc.DeliverAll(),
-					//nc.DeliverLast(),
+					nc.DeliverLast(),
 					nc.AckExplicit(),
 				},
 				TrackMsgId: true,
