@@ -17,6 +17,7 @@ services:
     image: golang:1.22.1-alpine
     working_dir: /usr/src/app/notifications-service
     environment:
+      DB_DSN: host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin
       AWS_ACCESS_KEY_ID: YOUR_ACCESS_KEY_ID
       AWS_SECRET_ACCESS_KEY: YOUR_SECRET_ACCESS_KEY
       AWS_DEFAULT_REGION: eu-central-1

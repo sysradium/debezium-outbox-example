@@ -12,9 +12,9 @@ import (
 	natsJS "github.com/nats-io/nats.go/jetstream"
 )
 
-func NewNatsPublisher(logger *slog.Logger, prefix string) (*nats.Publisher, error) {
+func NewNatsPublisher(logger *slog.Logger, url, prefix string) (*nats.Publisher, error) {
 	conn, err := nc.Connect(
-		"nats://nats:4222",
+		url,
 		nc.RetryOnFailedConnect(true),
 		nc.Timeout(30*time.Second),
 		nc.ReconnectWait(1*time.Second),

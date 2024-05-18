@@ -34,8 +34,7 @@ func main() {
 	// hardcoded just for an example
 	outbox := OUTBOX_TYPE_BASIC
 
-	dsn := "host=db user=postgres password=some-password dbname=users port=5432 sslmode=disable TimeZone=Europe/Berlin"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(os.Getenv("DB_DSN")), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		}})
@@ -52,7 +51,7 @@ func main() {
 
 	var repo repository.Repository[domain.User]
 	if outbox == OUTBOX_TYPE_BASIC {
-		publisher, err := publishers.NewNatsPublisher(logger, "outbox")
+		publisher, err := publishers.NewNatsPublisher(logger, os.Getenv("NATS_URL"), "outbox")
 		if err != nil {
 			log.Fatal(err)
 		}

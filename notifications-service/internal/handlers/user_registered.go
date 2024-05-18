@@ -31,6 +31,6 @@ func (a *UserRegisteredHandler) Handle(msg *message.Message) error {
 		return err
 	}
 
-	a.logger.Info("User registered", "user", uMsg.String())
+	a.logger.Info("++ User registered", "user", uMsg.String())
 	return nil
 }
