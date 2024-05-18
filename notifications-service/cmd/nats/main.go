@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"log/slog"
+	"os"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
@@ -17,7 +18,7 @@ func main() {
 
 	subscriber, err := nats.NewSubscriber(
 		nats.SubscriberConfig{
-			URL:         "nats://nats:4222",
+			URL:         os.Getenv("NATS_URL"),
 			Unmarshaler: &nats.NATSMarshaler{},
 			JetStream: nats.JetStreamConfig{
 				SubscribeOptions: []nc.SubOpt{

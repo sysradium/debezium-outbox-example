@@ -14,6 +14,7 @@ type Outbox struct {
 	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
 	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
 	AggregateID   string `gorm:"column:aggregateid;type:varchar(255);not null"`
+	Attempts      int    `gorm:"column:attempts;type:integer;not null"`
 	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
 }
 

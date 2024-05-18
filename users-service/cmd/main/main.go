@@ -40,12 +40,15 @@ func main() {
 			SingularTable: true,
 		}})
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error("failed connecting to db", "error", err.Error())
 		os.Exit(1)
 	}
 
 	// A bit clumsy, but whatever for now
-	db.AutoMigrate(&debezium.Outbox{}, &repository.User{})
+	if err := db.AutoMigrate(&debezium.Outbox{}, &repository.User{}); err != nil {
+		logger.Error("migration failed", "error", err)
+		os.Exit(1)
+	}
 
 	var repo repository.Repository[domain.User]
 	if outbox == OUTBOX_TYPE_BASIC {
@@ -92,7 +95,6 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("shutting http server down")
 		server.ListenAndServe()
 	}()
 

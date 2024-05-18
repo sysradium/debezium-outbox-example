@@ -27,4 +27,3 @@ type Payload struct {
 	Payload json.RawMessage `json:"payload"`
 	Id      string          `json:"id"`
 }
-
