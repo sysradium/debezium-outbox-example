@@ -2,13 +2,13 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/domain"
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
-	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox/debezium"
 	"gorm.io/gorm"
 )
 
@@ -33,7 +33,7 @@ func (u User) ToDomain() domain.User {
 
 type UserRepository struct {
 	db            *gorm.DB
-	outboxFactory func(*gorm.DB) outbox.Storer
+	outboxFactory func(*sql.DB) outbox.Storer
 	logger        *slog.Logger
 }
 
@@ -55,9 +55,9 @@ func NewUserRepository(
 		db:     db,
 		logger: logger,
 	}
-	u.outboxFactory = debezium.NewOutboxPublisher(debezium.WithLogger(
-		u.logger.With("logger", "debezium.outbox"),
-	))
+	//	u.outboxFactory = debezium.NewOutboxPublisher(debezium.WithLogger(
+	//		u.logger.With("logger", "debezium.outbox"),
+	//	))
 
 	for _, o := range opts {
 		o(u)
@@ -80,7 +80,11 @@ func (r *UserRepository) Delete(ctx context.Context, id uint) error {
 }
 
 func (r *UserRepository) Outbox() outbox.Storer {
-	return r.outboxFactory(r.db)
+	db, err := r.db.DB()
+	if err != nil {
+		panic(err)
+	}
+	return r.outboxFactory(db)
 }
 
 func (r *UserRepository) Atomic(ctx context.Context, fn TxFn[domain.User]) (rUser domain.User, rErr error) {

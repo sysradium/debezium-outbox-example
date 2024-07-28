@@ -2,13 +2,13 @@ package basic
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Publisher interface {
@@ -17,7 +17,7 @@ type Publisher interface {
 }
 
 type Worker struct {
-	db              *gorm.DB
+	db              *sql.DB
 	logger          *slog.Logger
 	pollingInterval time.Duration
 	publisher       Publisher
@@ -29,10 +29,10 @@ type Worker struct {
 	tableName       string
 }
 
-func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *Worker {
+func NewWorker(db *sql.DB, publisher message.Publisher, opts ...workerOption) *Worker {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &Worker{
-		db:        db.Table("my-outbox"),
+		db:        db,
 		logger:    slog.Default(),
 		publisher: publisher,
 		batchSize: 10000,
@@ -49,8 +49,11 @@ func NewWorker(db *gorm.DB, publisher message.Publisher, opts ...workerOption) *
 	return w
 }
 
-func (p *Worker) Start() {
-	p.db.Table(p.tableName).AutoMigrate(&Outbox{})
+func (p *Worker) Start() error {
+	if _, err := p.db.Exec(createSQLStatement); err != nil {
+		return err
+	}
+
 	ticker := time.NewTicker(p.pollingInterval)
 	defer func() {
 		ticker.Stop()
@@ -60,7 +63,7 @@ func (p *Worker) Start() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			if err := p.processMessages(p.ctx, p.batchSize); err != nil {
 				p.logger.Error("failed to process messages", "error", err)
@@ -77,31 +80,42 @@ func (p *Worker) Stop() {
 }
 
 func (p *Worker) processMessages(ctx context.Context, batchSize int) (rErr error) {
-	db := p.db.WithContext(ctx).Begin()
+	db, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		if p := recover(); p != nil {
 			_ = db.Rollback()
 			panic(p)
 		}
 		if rErr != nil {
-			xerr := db.Rollback().Error
+			xerr := db.Rollback()
 			if xerr != nil {
-				rErr = fmt.Errorf("%s: %w", xerr.Error(), rErr)
+				rErr = errors.Join(xerr, rErr)
 			}
 			return
 		}
-		rErr = db.Commit().Error
+		rErr = db.Commit()
 	}()
 
+	rows, err := db.Query("SELECT id, aggregatetype, aggregateid, attempts, payload FROM \"my-outbox\" LIMIT 1000 FOR UPDATE SKIP LOCKED")
+	if err != nil {
+		return err
+	}
+
 	var messages []Outbox
-	res := db.Limit(batchSize).Clauses(
-		clause.Locking{
-			Strength: clause.LockingStrengthUpdate,
-			Options:  clause.LockingOptionsSkipLocked,
-		},
-	).Find(&messages)
-	if res.Error != nil {
-		return res.Error
+	for rows.Next() {
+		var msg Outbox
+		if err := rows.Scan(&msg.ID, &msg.AggregateType, &msg.AggregateID, &msg.Attempts, &msg.Payload); err != nil {
+			return err
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	if len(messages) == 0 {
@@ -115,10 +129,10 @@ func (p *Worker) processMessages(ctx context.Context, batchSize int) (rErr error
 		); err != nil {
 			return fmt.Errorf("unable to publish event: %w", err)
 		}
-	}
-
-	if res := db.Delete(&messages); res.Error != nil {
-		p.logger.Error("unable to delete message batch")
+		_, err := db.ExecContext(ctx, "DELETE FROM \"my-outbox\" WHERE id = $1", m.ID)
+		if err != nil {
+			return fmt.Errorf("unable to remove event from DB: %w", err)
+		}
 	}
 
 	return nil

@@ -2,20 +2,32 @@ package basic
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 
 	"github.com/sysradium/debezium-outbox-example/users-service/internal/outbox"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"gorm.io/gorm"
 )
 
+const createSQLStatement = `
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS "my-outbox" (
+    id uuid NOT NULL DEFAULT uuid_generate_v4(),
+    aggregatetype character varying(255) NOT NULL,
+    aggregateid character varying(255) NOT NULL,
+    payload jsonb NOT NULL,
+    attempts integer NOT NULL,
+    PRIMARY KEY (id)
+);`
+
 type Outbox struct {
-	ID            string `gorm:"column:id;type:uuid;primary_key;default:uuid_generate_v4()"`
-	AggregateType string `gorm:"column:aggregatetype;type:varchar(255);not null"`
-	AggregateID   string `gorm:"column:aggregateid;type:varchar(255);not null"`
-	Attempts      int    `gorm:"column:attempts;type:integer;not null"`
-	Payload       []byte `gorm:"column:payload;type:jsonb;not null"`
+	ID            string
+	AggregateType string
+	AggregateID   string
+	Attempts      int
+	Payload       []byte
 }
 
 type Marshaler interface {
@@ -23,15 +35,19 @@ type Marshaler interface {
 }
 
 type OutboxStorage struct {
-	tx        *gorm.DB
+	tx        *sql.DB
 	logger    *slog.Logger
 	marshaler Marshaler
 }
 
-func NewOutbox() func(*gorm.DB) outbox.Storer {
-	return func(tx *gorm.DB) outbox.Storer {
+func NewOutbox() func(*sql.DB) outbox.Storer {
+	return func(tx *sql.DB) outbox.Storer {
+		_, err := tx.Exec(createSQLStatement)
+		if err != nil {
+			panic(err)
+		}
 		pub := &OutboxStorage{
-			tx:     tx.Table("my-outbox"),
+			tx:     tx,
 			logger: slog.Default(),
 			marshaler: protojson.MarshalOptions{
 				UseProtoNames: true,
@@ -49,14 +65,13 @@ func (p *OutboxStorage) Store(ctx context.Context, id string, event proto.Messag
 		return err
 	}
 
-	outboxEntry := Outbox{
-		AggregateType: string(proto.MessageName(event).Name()),
-		AggregateID:   id,
-		Payload:       jsonBytes,
-	}
-
-	tx := p.tx.WithContext(ctx)
-	if res := tx.Create(&outboxEntry); res.Error != nil {
+	if _, err := p.tx.ExecContext(
+		ctx,
+		"INSERT INTO my-outbox (id, aggregateType, aggregateId, payload) VALUES(uuid_generate_v4(), ? ? ?)",
+		string(proto.MessageName(event).Name()),
+		id,
+		jsonBytes,
+	); err != nil {
 		return err
 	}
 

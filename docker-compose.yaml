@@ -50,13 +50,13 @@ services:
 
   debezium:
     platform: linux/amd64
-    image: debezium/server:2.6
+    image: debezium/server:2.7
     volumes:
       - debezium-data:/debezium/data
-      - ./debezium/application-nats.properties:/debezium/conf/application.properties
+      - ./debezium/application-nats-non-outbox.properties:/debezium/conf/application.properties
     environment:
-      AWS_ACCESS_KEY_ID: 'test'
-      AWS_SECRET_ACCESS_KEY: 'test'
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
     depends_on:
       - db
       - nats

@@ -19,7 +19,7 @@ func NewApplication(
 
 ) Application {
 	a := Application{}
-	a.Commands.CreateUser = commands.ApplyCommandDecorators[commands.CreateUser](
+	a.Commands.CreateUser = commands.ApplyCommandDecorators(
 		commands.NewUserCreateHandler(userRepo),
 		slog.Default(),
 	)

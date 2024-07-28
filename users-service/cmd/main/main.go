@@ -50,21 +50,33 @@ func main() {
 	}
 
 	var repo repository.Repository[domain.User]
-	if outbox == OUTBOX_TYPE_BASIC {
+	switch outbox {
+	case OUTBOX_TYPE_BASIC:
 		publisher, err := publishers.NewNatsPublisher(logger, os.Getenv("NATS_URL"), "outbox")
 		if err != nil {
 			log.Fatal(err)
 		}
 
+		sdb, err := db.DB()
+		if err != nil {
+			logger.Error("can not retrieve db", "error", err)
+			os.Exit(1)
+		}
+
 		worker := basic.NewWorker(
-			db,
+			sdb,
 			publisher,
 			basic.WithLogger(logger),
 			basic.WithPollingInterval(time.Millisecond*50),
 			basic.WithTopicPrefix("outbox.event"),
 		)
 
-		go worker.Start()
+		go func() {
+			if err := worker.Start(); err != nil {
+				logger.Error("unable to start a worker", "error", err)
+				os.Exit(1)
+			}
+		}()
 		defer func() {
 			logger.Info("shutting worker down")
 			worker.Stop()
@@ -77,11 +89,11 @@ func main() {
 			repository.WithOutbox(basic.NewOutbox()),
 		)
 
-	} else if outbox == OUTBOX_TYPE_DEBEZIUM {
+	case OUTBOX_TYPE_DEBEZIUM:
 		repo = repository.NewUserRepository(
 			db,
 			repository.WithLogger(logger),
-			repository.WithOutbox(debezium.NewOutboxPublisher()),
+			//repository.WithOutbox(debezium.NewOutboxPublisher()),
 		)
 	}
 
@@ -94,7 +106,9 @@ func main() {
 	}
 
 	go func() {
-		server.ListenAndServe()
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
 	}()
 
 	sigs := make(chan os.Signal, 1)
@@ -102,6 +116,8 @@ func main() {
 	<-sigs
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	server.Shutdown(ctx)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatal(err)
+	}
 	cancel()
 }
