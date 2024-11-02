@@ -50,10 +50,10 @@ services:
 
   debezium:
     platform: linux/amd64
-    image: debezium/server:2.7
+    image: quay.io/debezium/server:3.0.1.Final
     volumes:
       - debezium-data:/debezium/data
-      - ./debezium/application-nats-non-outbox.properties:/debezium/conf/application.properties
+      - ./debezium/application-nats-non-outbox.properties:/debezium/config/application.properties
     environment:
       AWS_ACCESS_KEY_ID: "test"
       AWS_SECRET_ACCESS_KEY: "test"
